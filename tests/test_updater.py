@@ -706,7 +706,6 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
 
 
 
-
   def test_3__update_metadata(self):
     # Setup
     # _update_metadata() downloads, verifies, and installs the specified
@@ -846,6 +845,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
           'Expected a failure to verify metadata when the metadata had a '
           'specification version number that was unexpected.  '
           'No error was raised.')
+
 
 
 
@@ -1830,6 +1830,13 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     snapshot_info = repository_updater._verify_merkle_path('targets')
 
     self.assertEqual(snapshot_info['version'], 1)
+
+    # verify merkle path with invalid role
+    self.assertRaises(tuf.exceptions.NoWorkingMirrorError,
+        repository_updater._verify_merkle_path, 'foo')
+
+    # Test get_one_valid_targetinfo with snapshot merkle
+    repository_updater.get_one_valid_targetinfo('file1.txt')
 
 
 

@@ -662,15 +662,10 @@ def _load_top_level_metadata(repository, top_level_filenames, repository_name):
         repository_name=repository_name)
 
     # Add the keys specified in the delegations field of the Targets role.
-    for key_metadata in six.itervalues(targets_metadata['delegations']['keys']):
+    for keyid, key_metadata in six.iteritems(targets_metadata['delegations']['keys']):
 
-      # The repo may have used hashing algorithms for the generated keyids
-      # that doesn't match the client's set of hash algorithms.  Make sure
-      # to only used the repo's selected hashing algorithms.
-      hash_algorithms = securesystemslib.settings.HASH_ALGORITHMS
-      securesystemslib.settings.HASH_ALGORITHMS = key_metadata['keyid_hash_algorithms']
-      key_object, keyids = securesystemslib.keys.format_metadata_to_key(key_metadata)
-      securesystemslib.settings.HASH_ALGORITHMS = hash_algorithms
+      # Use the keyid found in the delegation
+      key_object, _ = securesystemslib.keys.format_metadata_to_key(key_metadata, keyid)
 
       # Add 'key_object' to the list of recognized keys.  Keys may be shared,
       # so do not raise an exception if 'key_object' has already been loaded.
@@ -679,10 +674,7 @@ def _load_top_level_metadata(repository, top_level_filenames, repository_name):
       # repository maintainer should have also been made aware of the duplicate
       # key when it was added.
       try:
-        for keyid in keyids: #pragma: no branch
-          key_object['keyid'] = keyid
-          tuf.keydb.add_key(key_object, keyid=None,
-              repository_name=repository_name)
+        tuf.keydb.add_key(key_object, keyid=None, repository_name=repository_name)
 
       except tuf.exceptions.KeyAlreadyExistsError:
         pass
@@ -1762,6 +1754,29 @@ def print_merkle_tree(root):
   _print_merkle_tree(root, 0)
 
 
+ 
+
+def _get_hashes_and_length_if_needed(use_length, use_hashes, full_file_path,
+    storage_backend):
+  """
+  Calculate length and hashes only if they are required,
+  otherwise, for adopters of tuf with lots of delegations,
+  this will cause unnecessary overhead.
+  """
+
+  length = None
+  hashes = None
+  if use_length:
+    length = securesystemslib.util.get_file_length(full_file_path,
+        storage_backend)
+
+  if use_hashes:
+    hashes = securesystemslib.util.get_file_hashes(full_file_path,
+        tuf.settings.FILE_HASH_ALGORITHMS, storage_backend)
+
+  return length, hashes
+
+
 
 
 def generate_snapshot_metadata(metadata_directory, version, expiration_date,
@@ -1847,12 +1862,8 @@ def generate_snapshot_metadata(metadata_directory, version, expiration_date,
   # Targets, and all delegated roles of the repository.
   fileinfodict = {}
 
-  length, hashes = securesystemslib.util.get_file_details(
-      os.path.join(metadata_directory, TARGETS_FILENAME),
-      tuf.settings.FILE_HASH_ALGORITHMS, storage_backend)
-
-  length = (use_length and length) or None
-  hashes = (use_hashes and hashes) or None
+  length, hashes = _get_hashes_and_length_if_needed(use_length, use_hashes,
+      os.path.join(metadata_directory, TARGETS_FILENAME), storage_backend)
 
   targets_role = TARGETS_FILENAME[:-len(METADATA_EXTENSION)]
 
@@ -1888,18 +1899,8 @@ def generate_snapshot_metadata(metadata_directory, version, expiration_date,
       if tuf.roledb.role_exists(rolename, repository_name) and \
           rolename not in tuf.roledb.TOP_LEVEL_ROLES:
 
-        length = None
-        hashes = None
-        # We want to make sure we are calculating length and hashes only when
-        # at least one of them is needed. Otherwise, for adoptors of tuf with
-        # lots of delegations, this will cause unnecessary overhead.
-        if use_length or use_hashes:
-          length, hashes = securesystemslib.util.get_file_details(
-              os.path.join(metadata_directory, metadata_filename),
-              tuf.settings.FILE_HASH_ALGORITHMS)
-
-          length = (use_length and length) or None
-          hashes = (use_hashes and hashes) or None
+        length, hashes = _get_hashes_and_length_if_needed(use_length, use_hashes,
+            os.path.join(metadata_directory, metadata_filename), storage_backend)
 
         file_version = get_metadata_versioninfo(rolename,
             repository_name)
@@ -2001,11 +2002,8 @@ def generate_timestamp_metadata(snapshot_file_path, version, expiration_date,
 
   snapshot_fileinfo = {}
 
-  length, hashes = securesystemslib.util.get_file_details(snapshot_file_path,
-      tuf.settings.FILE_HASH_ALGORITHMS, storage_backend)
-
-  length = (use_length and length) or None
-  hashes = (use_hashes and hashes) or None
+  length, hashes = _get_hashes_and_length_if_needed(use_length, use_hashes,
+      snapshot_file_path, storage_backend)
 
   snapshot_filename = os.path.basename(snapshot_file_path)
   # Retrieve the versioninfo of the Snapshot metadata file.

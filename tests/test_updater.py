@@ -57,7 +57,6 @@ import tempfile
 import logging
 import random
 import subprocess
-import sys
 import errno
 import unittest
 
@@ -71,6 +70,8 @@ import tuf.repository_tool as repo_tool
 import tuf.repository_lib as repo_lib
 import tuf.unittest_toolbox as unittest_toolbox
 import tuf.client.updater as updater
+
+import utils
 
 import securesystemslib
 import six
@@ -110,14 +111,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     logger.info('\tServing on port: '+str(cls.SERVER_PORT))
     cls.url = 'http://localhost:'+str(cls.SERVER_PORT) + os.path.sep
 
-    # NOTE: Following error is raised if a delay is not long enough to allow
-    # the server process to set up and start listening:
-    #     <urlopen error [Errno 111] Connection refused>
-    # or, on Windows:
-    #     Failed to establish a new connection: [Errno 111] Connection refused'
-    # While 0.3s has consistently worked on Travis and local builds, it led to
-    # occasional failures in AppVeyor builds, so increasing this to 2s, sadly.
-    time.sleep(2)
+    utils.wait_for_server('localhost', cls.SERVER_PORT)
 
 
 
@@ -130,11 +124,10 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     if cls.server_process.returncode is None:
       logger.info('\tServer process ' + str(cls.server_process.pid) + ' terminated.')
       cls.server_process.kill()
+      cls.server_process.wait()
 
     # Remove the temporary repository directory, which should contain all the
-    # metadata, targets, and key files generated for the test cases.  sleep
-    # for a bit to allow the kill'd server process to terminate.
-    time.sleep(.3)
+    # metadata, targets, and key files generated for the test cases
     shutil.rmtree(cls.temporary_directory)
 
 
@@ -359,7 +352,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     # 'targets.json' are also loaded when the repository object is
     # instantiated.
 
-    self.assertEqual(number_of_root_keys * 2 + 2, len(tuf.keydb._keydb_dict[self.repository_name]))
+    self.assertEqual(number_of_root_keys + 1, len(tuf.keydb._keydb_dict[self.repository_name]))
 
     # Test: normal case.
     self.repository_updater._rebuild_key_and_role_db()
@@ -370,7 +363,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     # _rebuild_key_and_role_db() will only rebuild the keys and roles specified
     # in the 'root.json' file, unlike __init__().  Instantiating an updater
     # object calls both _rebuild_key_and_role_db() and _import_delegations().
-    self.assertEqual(number_of_root_keys * 2, len(tuf.keydb._keydb_dict[self.repository_name]))
+    self.assertEqual(number_of_root_keys, len(tuf.keydb._keydb_dict[self.repository_name]))
 
     # Test: properly updated roledb and keydb dicts if the Root role changes.
     root_metadata = self.repository_updater.metadata['current']['root']
@@ -381,7 +374,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
 
     root_roleinfo = tuf.roledb.get_roleinfo('root', self.repository_name)
     self.assertEqual(root_roleinfo['threshold'], 8)
-    self.assertEqual(number_of_root_keys * 2 - 2, len(tuf.keydb._keydb_dict[self.repository_name]))
+    self.assertEqual(number_of_root_keys - 1, len(tuf.keydb._keydb_dict[self.repository_name]))
 
 
 
@@ -567,7 +560,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
 
     # Take into account the number of keyids algorithms supported by default,
     # which this test condition expects to be two (sha256 and sha512).
-    self.assertEqual(4 * 2, len(tuf.keydb._keydb_dict[repository_name]))
+    self.assertEqual(4, len(tuf.keydb._keydb_dict[repository_name]))
 
     # Test: pass a role without delegations.
     self.repository_updater._import_delegations('root')
@@ -576,8 +569,8 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     # checking the number of elements in the dictionaries.
     self.assertEqual(len(tuf.roledb._roledb_dict[repository_name]), 4)
     # Take into account the number of keyid hash algorithms, which this
-    # test condition expects to be two (for sha256 and sha512).
-    self.assertEqual(len(tuf.keydb._keydb_dict[repository_name]), 4 * 2)
+    # test condition expects to be one
+    self.assertEqual(len(tuf.keydb._keydb_dict[repository_name]), 4)
 
     # Test: normal case, first level delegation.
     self.repository_updater._import_delegations('targets')
@@ -585,7 +578,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     self.assertEqual(len(tuf.roledb._roledb_dict[repository_name]), 5)
     # The number of root keys (times the number of key hash algorithms) +
     # delegation's key (+1 for its sha512 keyid).
-    self.assertEqual(len(tuf.keydb._keydb_dict[repository_name]), 4 * 2 + 2)
+    self.assertEqual(len(tuf.keydb._keydb_dict[repository_name]), 4 + 1)
 
     # Verify that roledb dictionary was added.
     self.assertTrue('role1' in tuf.roledb._roledb_dict[repository_name])
@@ -1101,13 +1094,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     command = ['python', self.SIMPLE_SERVER_PATH, str(SERVER_PORT)]
     server_process = subprocess.Popen(command)
 
-    # NOTE: Following error is raised if a delay is not long enough:
-    # <urlopen error [Errno 111] Connection refused>
-    # or, on Windows:
-    # Failed to establish a new connection: [Errno 111] Connection refused'
-    # While 0.3s has consistently worked on Travis and local builds, it led to
-    # occasional failures in AppVeyor builds, so increasing this to 2s, sadly.
-    time.sleep(2)
+    utils.wait_for_server('localhost', SERVER_PORT)
 
     # 'path/to/tmp/repository' -> 'localhost:8001/tmp/repository'.
     repository_basepath = self.repository_directory[len(os.getcwd()):]
@@ -1231,6 +1218,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
         '/foo/foo1.1.tar.gz')
 
     server_process.kill()
+    server_process.wait()
 
 
 
@@ -1368,15 +1356,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     SERVER_PORT = random.randint(30000, 45000)
     command = ['python', self.SIMPLE_SERVER_PATH, str(SERVER_PORT)]
     server_process = subprocess.Popen(command)
-
-    # NOTE: Following error is raised if a delay is not long enough to allow
-    # the server process to set up and start listening:
-    #     <urlopen error [Errno 111] Connection refused>
-    # or, on Windows:
-    #     Failed to establish a new connection: [Errno 111] Connection refused'
-    # While 0.3s has consistently worked on Travis and local builds, it led to
-    # occasional failures in AppVeyor builds, so increasing this to 2s, sadly.
-    time.sleep(2)
+    utils.wait_for_server('localhost', SERVER_PORT)
 
     # 'path/to/tmp/repository' -> 'localhost:8001/tmp/repository'.
     repository_basepath = self.repository_directory[len(os.getcwd()):]
@@ -1488,6 +1468,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     self.assertEqual(len(updated_targets), 1)
 
     server_process.kill()
+    server_process.wait()
 
 
 
@@ -1500,15 +1481,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     SERVER_PORT = random.randint(30000, 45000)
     command = ['python', self.SIMPLE_SERVER_PATH, str(SERVER_PORT)]
     server_process = subprocess.Popen(command)
-
-    # NOTE: Following error is raised if a delay is not long enough to allow
-    # the server process to set up and start listening:
-    #     <urlopen error [Errno 111] Connection refused>
-    # or, on Windows:
-    #     Failed to establish a new connection: [Errno 111] Connection refused'
-    # While 0.3s has consistently worked on Travis and local builds, it led to
-    # occasional failures in AppVeyor builds, so increasing this to 2s, sadly.
-    time.sleep(2)
+    utils.wait_for_server('localhost', SERVER_PORT)
 
     # 'path/to/tmp/repository' -> 'localhost:8001/tmp/repository'.
     repository_basepath = self.repository_directory[len(os.getcwd()):]
@@ -1597,6 +1570,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     self.repository_updater.remove_obsolete_targets(destination_directory)
 
     server_process.kill()
+    server_process.wait()
 
 
 
@@ -1754,38 +1728,19 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
 
 
 
-  def test_11__verify_uncompressed_metadata_file(self):
+  def test_11__verify_metadata_file(self):
     # Test for invalid metadata content.
     metadata_file_object = tempfile.TemporaryFile()
     metadata_file_object.write(b'X')
     metadata_file_object.seek(0)
 
     self.assertRaises(tuf.exceptions.InvalidMetadataJSONError,
-        self.repository_updater._verify_uncompressed_metadata_file,
+        self.repository_updater._verify_metadata_file,
         metadata_file_object, 'root')
 
 
 
-  def test_12__verify_root_chain_link(self):
-    # Test for an invalid signature in the chain link.
-    # current = (i.e., 1.root.json)
-    # next = signable for the next metadata in the chain (i.e., 2.root.json)
-    rolename = 'root'
-    current_root = self.repository_updater.metadata['current']['root']
-
-    targets_path = os.path.join(self.repository_directory, 'metadata', 'targets.json')
-
-    # 'next_invalid_root' is a Targets signable, as written to disk.
-    # We use the Targets metadata here to ensure the signatures are invalid.
-    next_invalid_root = securesystemslib.util.load_json_file(targets_path)
-
-    self.assertRaises(securesystemslib.exceptions.BadSignatureError,
-        self.repository_updater._verify_root_chain_link, rolename, current_root,
-        next_invalid_root)
-
-
-
-  def test_13__get_file(self):
+  def test_12__get_file(self):
     # Test for an "unsafe" download, where the file is downloaded up to
     # a required length (and no more).  The "safe" download approach
     # downloads an exact required length.
@@ -1805,7 +1760,7 @@ class TestUpdater(unittest_toolbox.Modified_TestCase):
     self.repository_updater._get_file('targets.json', verify_target_file,
         file_type, file_size, download_safely=False)
 
-  def test_14__targets_of_role(self):
+  def test_13__targets_of_role(self):
     # Test case where a list of targets is given.  By default, the 'targets'
     # parameter is None.
     targets = [{'filepath': 'file1.txt', 'fileinfo': {'length': 1, 'hashes': {'sha256': 'abc'}}}]
@@ -1933,14 +1888,8 @@ class TestMultiRepoUpdater(unittest_toolbox.Modified_TestCase):
     self.url = 'http://localhost:' + str(self.SERVER_PORT) + os.path.sep
     self.url2 = 'http://localhost:' + str(self.SERVER_PORT2) + os.path.sep
 
-    # NOTE: Following error is raised if a delay is not long enough to allow
-    # the server process to set up and start listening:
-    #     <urlopen error [Errno 111] Connection refused>
-    # or, on Windows:
-    #     Failed to establish a new connection: [Errno 111] Connection refused'
-    # While 0.3s has consistently worked on Travis and local builds, it led to
-    # occasional failures in AppVeyor builds, so increasing this to 2s, sadly.
-    time.sleep(2)
+    utils.wait_for_server('localhost', self.SERVER_PORT)
+    utils.wait_for_server('localhost', self.SERVER_PORT2)
 
     url_prefix = 'http://localhost:' + str(self.SERVER_PORT)
     url_prefix2 = 'http://localhost:' + str(self.SERVER_PORT2)
@@ -1980,19 +1929,19 @@ class TestMultiRepoUpdater(unittest_toolbox.Modified_TestCase):
     if self.server_process.returncode is None:
       logger.info('Server process ' + str(self.server_process.pid) + ' terminated.')
       self.server_process.kill()
+      self.server_process.wait()
 
     if self.server_process2.returncode is None:
       logger.info('Server 2 process ' + str(self.server_process2.pid) + ' terminated.')
       self.server_process2.kill()
+      self.server_process2.wait()
 
     # updater.Updater() populates the roledb with the name "test_repository1"
     tuf.roledb.clear_roledb(clear_all=True)
     tuf.keydb.clear_keydb(clear_all=True)
 
     # Remove the temporary repository directory, which should contain all the
-    # metadata, targets, and key files generated of all the test cases.  sleep
-    # for a bit to allow the kill'd server processes to terminate.
-    time.sleep(.3)
+    # metadata, targets, and key files generated of all the test cases
     shutil.rmtree(self.temporary_directory)
 
 

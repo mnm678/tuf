@@ -166,9 +166,9 @@ repo_tool.disable_console_log_messages()
 
 PROG_NAME = 'repo.py'
 
-REPO_DIR = 'tufrepo'
+REPO_DIR = 'registry'
 CLIENT_DIR = 'tufclient'
-KEYSTORE_DIR = 'tufkeystore'
+KEYSTORE_DIR = 'keystore'
 
 ROOT_KEY_NAME = 'root_key'
 TARGETS_KEY_NAME = 'targets_key'
@@ -642,7 +642,7 @@ def sign_role(parsed_arguments):
   # called on a role, it is no longer considered "dirty" and the role will not
   # be written again if another write() or writeall() were subsequently made.
   repository.write(parsed_arguments.role,
-      consistent_snapshot=consistent_snapshot, increment_version_number=False)
+      consistent_snapshot=consistent_snapshot, increment_version_number=True)
 
   # Write the updated top-level roles, if any.  Also write Snapshot and
   # Timestamp to make a new release.  Automatically making a new release can be
@@ -1065,15 +1065,15 @@ def parse_arguments():
       help='Specify a Root password. "pw" is used if --pw is unset, or a'
       ' password can be entered via a prompt by specifying --pw by itself.')
 
-  parser.add_argument('--targets_pw', nargs='?', default='pw', metavar='<password>',
+  parser.add_argument('--targets_pw', nargs='?', default='password', metavar='<password>',
       help='Specify a Targets password. "pw" is used if --pw is unset, or a'
       ' password can be entered via a prompt by specifying --pw by itself.')
 
-  parser.add_argument('--snapshot_pw', nargs='?', default='pw', metavar='<password>',
+  parser.add_argument('--snapshot_pw', nargs='?', default='password', metavar='<password>',
       help='Specify a Snapshot password. "pw" is used if --pw is unset, or a'
       ' password can be entered via a prompt by specifying --pw by itself.')
 
-  parser.add_argument('--timestamp_pw', nargs='?', default='pw', metavar='<password>',
+  parser.add_argument('--timestamp_pw', nargs='?', default='password', metavar='<password>',
       help='Specify a Timestamp password. "pw" is used if --pw is unset, or a'
       ' password can be entered via a prompt by specifying --pw by itself.')
 

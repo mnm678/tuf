@@ -122,7 +122,11 @@ def update_client(parsed_arguments):
 
   # Create the repository object using the repository name 'repository'
   # and the repository mirrors defined above.
-  updater = tuf.client.updater.Updater('tufrepo', repository_mirrors)
+  if not parsed_arguments.map_file:
+    updater = tuf.client.updater.Updater('tufrepo', repository_mirrors)
+  else:
+    updater = tuf.client.updater.Updater('tufrepo', repository_mirrors,
+        parsed_arguments.map_file)
 
   # The local destination directory to save the target files.
   destination_directory = './tuftargets'
@@ -198,6 +202,9 @@ def parse_arguments():
 
   parser.add_argument('targets', nargs='+', metavar='<file>', help='Specify'
       ' the target files to retrieve from the specified TUF repository.')
+
+  parser.add_argument('--map_file', type=str, required=False, metavar='<file>',
+      help='map file')
 
   parsed_arguments = parser.parse_args()
 

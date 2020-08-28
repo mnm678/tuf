@@ -1132,7 +1132,9 @@ class Updater(object):
       # download the relevant merkle path when downloading a target.
       self._update_metadata_if_changed('snapshot',
           referenced_metadata='timestamp')
-    self._update_metadata_if_changed('targets')
+
+    if self.targets_map_file is None:
+      self._update_metadata_if_changed('targets')
 
 
 
@@ -1609,6 +1611,7 @@ class Updater(object):
         if snapshot_merkle:
           return file_object
 
+
         # Determine if the specification version number is supported.  It is
         # assumed that "spec_version" is in (major.minor.fix) format, (for
         # example: "1.4.3") and that releases with the same major version
@@ -1936,6 +1939,8 @@ class Updater(object):
     merkle_root = self.metadata['current']['timestamp']['merkle_root']
 
     # Download Merkle path
+    if metadata_role == 'targets' and self.targets_map_file is not None:
+      metadata_role = self.targets_map_file['targets_filename']
     self._update_metadata(metadata_role + '-snapshot', 1000, snapshot_merkle=True)
     metadata_directory = self.metadata_directory['current']
     metadata_filename = metadata_role + '-snapshot.json'
@@ -2067,12 +2072,15 @@ class Updater(object):
       None.
     """
 
-    metadata_filename = metadata_role + '.json'
+    if self.targets_map_file is not None and metadata_role == 'targets':
+      metadata_filename = self.targets_map_file['targets_filename'] + '.json'
+    else:
+      metadata_filename = metadata_role + '.json'
     expected_versioninfo = None
 
     # Ensure the referenced metadata has been loaded.  The 'root' role may be
     # updated without having 'snapshot' available.
-    if referenced_metadata not in self.metadata['current']:
+    if 'merkle_root' not in self.metadata['current']['timestamp'] and referenced_metadata not in self.metadata['current']:
       raise tuf.exceptions.RepositoryError('Cannot update'
         ' ' + repr(metadata_role) + ' because ' + referenced_metadata + ' is'
         ' missing.')
@@ -2297,8 +2305,13 @@ class Updater(object):
           tuf.formats.make_versioninfo(targets_version_number)
 
       except KeyError:
-        trusted_versioninfo = \
-          self.metadata['current']['snapshot']['meta'][metadata_filename]
+        if 'merkle_root' in self.metadata['current']['timestamp']:
+          # Download version information from merkle tree
+          contents = self._verify_merkle_path(metadata_filename[:-len('.json')])
+          trusted_versioninfo = contents
+        else:
+          trusted_versioninfo = \
+            self.metadata['current']['snapshot']['meta'][metadata_filename]
 
     self.versioninfo[metadata_filename] = trusted_versioninfo
 
@@ -2672,7 +2685,7 @@ class Updater(object):
 
     roles_to_update = []
 
-    if rolename + '.json' in self.metadata['current']['snapshot']['meta']:
+    if 'merkle_root' in self.metadata['current']['timestamp'] or rolename + '.json' in self.metadata['current']['snapshot']['meta']:
       roles_to_update.append(rolename)
 
     if refresh_all_delegated_roles:
@@ -3411,7 +3424,6 @@ class Updater(object):
     <Returns>
       None.
     """
-
     # Do the arguments have the correct format?
     # This check ensures the arguments have the appropriate
     # number of objects and object types, and that all dict

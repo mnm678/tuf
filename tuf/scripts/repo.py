@@ -319,7 +319,7 @@ def delegate(parsed_arguments):
 
   consistent_snapshot = tuf.roledb.get_roleinfo('root',
       repository._repository_name)['consistent_snapshot']
-  repository.writeall(consistent_snapshot=consistent_snapshot)
+  repository.writeall(consistent_snapshot=consistent_snapshot, snapshot_merkle=True)
 
   # Move staged metadata directory to "live" metadata directory.
   write_to_live_repo(parsed_arguments)
@@ -364,7 +364,7 @@ def revoke(parsed_arguments):
 
   consistent_snapshot = tuf.roledb.get_roleinfo('root',
       repository._repository_name)['consistent_snapshot']
-  repository.writeall(consistent_snapshot=consistent_snapshot)
+  repository.writeall(consistent_snapshot=consistent_snapshot, snapshot_merkle=True)
 
   # Move staged metadata directory to "live" metadata directory.
   write_to_live_repo(parsed_arguments)
@@ -658,7 +658,7 @@ def sign_role(parsed_arguments):
     repository.snapshot.load_signing_key(snapshot_private)
     repository.timestamp.load_signing_key(timestamp_private)
 
-  repository.writeall(consistent_snapshot=consistent_snapshot)
+  repository.writeall(consistent_snapshot=consistent_snapshot, snapshot_merkle=True)
 
   # Move staged metadata directory to "live" metadata directory.
   write_to_live_repo(parsed_arguments)
@@ -802,7 +802,7 @@ def add_targets(parsed_arguments):
     repository.snapshot.load_signing_key(snapshot_private)
     repository.timestamp.load_signing_key(timestamp_private)
 
-  repository.writeall(consistent_snapshot=consistent_snapshot)
+  repository.writeall(consistent_snapshot=consistent_snapshot, snapshot_merkle=True)
 
   # Move staged metadata directory to "live" metadata directory.
   write_to_live_repo(parsed_arguments)
@@ -845,7 +845,7 @@ def remove_targets(parsed_arguments):
 
   consistent_snapshot = tuf.roledb.get_roleinfo('root',
       repository._repository_name)['consistent_snapshot']
-  repository.writeall(consistent_snapshot=consistent_snapshot)
+  repository.writeall(consistent_snapshot=consistent_snapshot, snapshot_merkle=True)
 
   # Move staged metadata directory to "live" metadata directory.
   write_to_live_repo(parsed_arguments)
@@ -864,7 +864,7 @@ def init_repo(parsed_arguments):
 
   if not parsed_arguments.bare:
     set_top_level_keys(repository, parsed_arguments)
-    repository.writeall(consistent_snapshot=parsed_arguments.consistent)
+    repository.writeall(consistent_snapshot=parsed_arguments.consistent, snapshot_merkle=True)
 
   else:
     repository.write(
